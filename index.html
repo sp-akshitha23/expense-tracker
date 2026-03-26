@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<title>Smart Expense Tracker</title>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<style>
+
+body{
+font-family: Arial;
+background:#f4f6f9;
+padding:20px;
+}
+
+.container{
+max-width:900px;
+margin:auto;
+background:white;
+padding:20px;
+border-radius:10px;
+box-shadow:0 4px 10px rgba(0,0,0,0.1);
+}
+
+h1{
+text-align:center;
+}
+
+form{
+display:flex;
+gap:10px;
+flex-wrap:wrap;
+margin-top:20px;
+}
+
+input,select,button{
+padding:10px;
+font-size:14px;
+}
+
+button{
+background:#007bff;
+color:white;
+border:none;
+cursor:pointer;
+}
+
+button:hover{
+background:#0056b3;
+}
+
+table{
+width:100%;
+border-collapse:collapse;
+margin-top:20px;
+}
+
+th,td{
+padding:10px;
+border-bottom:1px solid #ddd;
+text-align:center;
+}
+
+.delete{
+background:red;
+}
+
+.total{
+margin-top:15px;
+font-size:18px;
+font-weight:bold;
+text-align:right;
+}
+
+.limit-box{
+margin-top:20px;
+background:#eef3ff;
+padding:10px;
+border-radius:6px;
+}
+
+#limitMessage{
+color:red;
+font-weight:bold;
+margin-top:10px;
+}
+
+.chart-container{
+margin-top:30px;
+}
+
+</style>
+</head>
+
+<body>
+
+<div class="container">
+
+<h1>💰 Smart Expense Tracker</h1>
+
+<div class="limit-box">
+
+<h3>Set Weekly Budget</h3>
+
+<input type="number" id="budgetLimit" placeholder="Enter weekly limit ₹">
+
+<button onclick="setLimit()">Set Limit</button>
+
+<p id="limitMessage"></p>
+
+</div>
+
+<form id="expenseForm">
+
+<input type="text" id="title" placeholder="Expense Title" required>
+
+<input type="number" id="amount" placeholder="Amount" required>
+
+<select id="category">
+
+<option>Food</option>
+<option>Transport</option>
+<option>Shopping</option>
+<option>Bills</option>
+<option>Entertainment</option>
+<option>Other</option>
+
+</select>
+
+<button type="submit">Add Expense</button>
+
+</form>
+
+<table>
+
+<thead>
+
+<tr>
+<th>Title</th>
+<th>Amount</th>
+<th>Category</th>
+<th>Action</th>
+</tr>
+
+</thead>
+
+<tbody id="expenseList"></tbody>
+
+</table>
+
+<div class="total">
+Total: ₹<span id="totalAmount">0</span>
+</div>
+
+<div class="chart-container">
+<canvas id="expenseChart"></canvas>
+</div>
+
+</div>
+
+<script>
+
+let expenses = [];
+let budgetLimit = localStorage.getItem("budgetLimit") || 0;
+let chart;
+
+function setLimit(){
+
+budgetLimit = document.getElementById("budgetLimit").value;
+
+localStorage.setItem("budgetLimit",budgetLimit);
+
+alert("Weekly limit set to ₹"+budgetLimit);
+
+checkLimit();
+}
+
+function renderExpenses(){
+
+const list = document.getElementById("expenseList");
+
+list.innerHTML="";
+
+let total=0;
+
+expenses.forEach((expense,index)=>{
+
+total+=expense.amount;
+
+const row=document.createElement("tr");
+
+row.innerHTML=`
+<td>${expense.title}</td>
+<td>₹${expense.amount}</td>
+<td>${expense.category}</td>
+<td><button class="delete" onclick="deleteExpense('${expense._id}')">Delete</button></td>
+`;
+
+list.appendChild(row);
+
+});
+
+document.getElementById("totalAmount").textContent=total;
+
+
+
+updateChart();
+
+checkLimit();
+}
+async function deleteExpense(id){
+    await fetch(`http://localhost:5000/expenses/${id}`, {
+        method: "DELETE"
+    });
+
+    loadExpenses();
+}
+
+
+document.getElementById("expenseForm").addEventListener("submit", async function(e){
+
+    e.preventDefault();
+
+    const title = document.getElementById("title").value;
+    const amount = parseFloat(document.getElementById("amount").value);
+    const category = document.getElementById("category").value;
+
+    const res = await fetch("http://localhost:5000/expenses", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title, amount, category })
+    });
+
+    if (res.status === 400) {
+        alert("❌ Limit exceeded");
+        return;
+    }
+
+    this.reset();
+    loadExpenses();
+});
+
+function checkLimit(){
+
+let total=expenses.reduce((sum,e)=>sum+e.amount,0);
+
+let message=document.getElementById("limitMessage");
+
+if(budgetLimit>0 && total>=budgetLimit){
+
+message.innerText="⚠ Limit reached compared to last week! Please control your expenses.";
+
+}else{
+
+message.innerText="";
+
+}
+
+}
+
+function updateChart(){
+
+let categories={};
+
+expenses.forEach(exp=>{
+
+if(categories[exp.category]){
+categories[exp.category]+=exp.amount;
+}else{
+categories[exp.category]=exp.amount;
+}
+
+});
+
+const labels=Object.keys(categories);
+const data=Object.values(categories);
+
+const ctx=document.getElementById("expenseChart");
+
+if(chart){
+chart.destroy();
+}
+
+chart=new Chart(ctx,{
+
+type:"pie",
+
+data:{
+labels:labels,
+datasets:[{
+data:data,
+backgroundColor:[
+"#ff6384",
+"#36a2eb",
+"#ffce56",
+"#4bc0c0",
+"#9966ff",
+"#ff9f40"
+]
+}]
+}
+
+});
+
+}
+
+async function loadExpenses() {
+    const res = await fetch("http://localhost:5000/expenses");
+    expenses = await res.json();
+    renderExpenses();
+}
+
+loadExpenses();
+
+</script>
+
+</body>
+</html>
